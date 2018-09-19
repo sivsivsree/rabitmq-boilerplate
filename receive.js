@@ -1,35 +1,55 @@
-var amqp = require('amqplib/callback_api'),
+const amqp = require('amqplib/callback_api'),
 	r = require('rethinkdb'),
-	Promise = require('bluebird')
+	Promise = require('bluebird'),
+	ampqConn = require('./services/AMPQ'),
+	rethinkConn = require('./services/RethinkConn')
+
+const RETHINK = { host: '172.17.0.2', port: 28015 };
+
+let streamProcess = async () => {
+
+	try {
+		let ch = await ampqConn({ host: 'amqp://localhost' });
+		let rConn = await rethinkConn(RETHINK);
 
 
 
+		var q = 'data_queue';
+		ch.assertQueue(q, { durable: true });
+		ch.prefetch(1);
+		ch.consume(q, function (msg) {
 
-var connection = null;
-r.connect({ host: '172.17.0.2', port: 28015 }, function (err, conn) {
-	if (err) throw err;
-	connection = conn;
+			r.table('livedata').insert({ uglyData: msg.content.toString() })
+				.run(rConn, function (err, result) {
+					if (err) throw err;
+				})
 
-	amqp.connect('amqp://localhost', function (err, conn) {
-		conn.createChannel(function (err, ch) {
-			var q = 'giveMeOOM';
+			ch.ack(msg);
+		}, { noAck: false });
 
-			ch.assertQueue(q, { durable: true });
-			ch.prefetch(1);
+	} catch (err) {
+		console.log(err)
+	}
+}
 
-			ch.consume(q, function (msg) {
-				r.table('livedata').insert({uglyData:msg.content.toString()})
-					.run(connection, function (err, result) {
-						if (err) throw err;
-						console.log(JSON.stringify(result, null, 2));
-					})
-				ch.ack(msg);
-			}, { noAck: false });
 
+
+let listenChanges = async () => {
+	let rConn = await rethinkConn(RETHINK);
+	r.table('livedata').changes().run(rConn, function(err, cursor) {
+		if (err) throw err;
+		cursor.each(function(err, row) {
+			if (err) throw err;
+			console.log(JSON.stringify(row, null, 2));
 		});
 	});
+}
 
 
 
 
-})
+
+streamProcess();
+listenChanges();
+
+
