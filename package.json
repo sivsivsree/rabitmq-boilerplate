@@ -9,6 +9,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "amqplib": "^0.5.2"
+    "amqplib": "^0.5.2",
+    "bluebird": "^3.5.2",
+    "rethinkdb": "^2.3.3"
   }
 }
